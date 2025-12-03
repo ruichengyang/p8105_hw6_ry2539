@@ -10,6 +10,12 @@ output: github_document
 library(tidyverse)
 library(p8105.datasets)
 library(broom)
+library(modelr)
+library(mgcv)
+library(ggpubr)
+```
+
+```{r}
 
 homicide_data <- read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/refs/heads/master/homicide-data.csv") 
 
@@ -60,9 +66,6 @@ ggplot(city_results,
   labs(title = "Adjusted Odds Ratio of Solved Homicides vs City and State",
        x = "Adjusted Odds Ratio",
        y = "City and State")
-
-
-
 
 ```
 
@@ -127,3 +130,70 @@ bootstrap_results_2 |> summarize(
 ```
 
 The distribution of both our parameter ratios and R-squared values of our distributions are approximately normal. For our model, the true R-squared values ranges from 0.934 to 0.947 at 95 percent confidence, suggesting a good fit. We are also 95 percent confident the true value of the ratio of the two parameters lies between -249.7 to -125.7. 
+
+# Question 3
+
+```{r}
+
+data_birthweight <- read.csv("birthweight.csv")
+
+data_birthweight_clean <- data_birthweight |>
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("male", "female")),
+    frace   = factor(frace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", 
+                    "Asian", "Puerto Rican", "Other", "Unknown")),
+    mrace   = factor(mrace, levels = c(1, 2, 3, 4, 8), labels = c("White", "Black", 
+                    "Asian", "Puerto Rican", "Other")),
+    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))
+  )
+
+model_lm <- lm(
+  bwt ~  babysex + mheight + ppbmi + ppwt + wtgain + frace +
+    mrace + malform + fincome + smoken,
+  data = data_birthweight_clean
+)
+
+birthweight_residuals <- data_birthweight_clean |>
+  add_predictions(model_lm) |>
+  add_residuals(model_lm)
+
+ggplot(birthweight_residuals, aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.4) +
+  labs(x = "Fitted Values", y = "Residuals",
+       title = "Residuals vs Fitted: Proposed Model")
+
+set.seed(1)
+
+cv_df =
+  crossv_mc(data_birthweight_clean, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df |> mutate(
+    fit_hypothesis = map(train, \(df) lm(bwt ~ babysex + mheight + ppbmi + ppwt + wtgain + frace +
+                                 mrace + malform + fincome + smoken,
+                               data = df)),
+    fit_A    = map(train, \(df)lm(bwt ~ blength + gaweeks, data = df)),
+    fit_B    = map(train, \(df)lm(bwt ~ bhead * blength * babysex, data = df))
+  )|> mutate(
+    rmse_hypothesis = map2_dbl(fit_hypothesis, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_A    = map2_dbl(fit_A, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_B = map2_dbl(fit_B, test, \(mod, df) rmse(model = mod, data = df)))
+
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse, fill = model)) + geom_violin()
+
+
+```
+
+When plotting the residuals vs the fitted values, we see that there is not a clear association between the two. For the most part, the residuals are concentrated around 0 for most fitted values. This suggests the hypothetical model is at least sufficient for predicting baby birthweight.
+
+By using cross validation and analyzing the distribution of our root mean square error (RMSE) for each model, my hypothetical model had the highest average RMSE. Meanwhile, the model that takes into account baby's head circumference at birth, the sex of the baby, the baby's length at birth, and the interaction between these variables has the lowest distribution of RMSE. Thus, that model seems to be the best fit to predict the birth weight of a baby.
