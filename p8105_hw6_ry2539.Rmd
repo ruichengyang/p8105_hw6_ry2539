@@ -4,9 +4,7 @@ author: "Ruicheng Yang"
 output: github_document
 ---
 
-# Question 1
-
-```{r}
+```{r setup}
 library(tidyverse)
 library(p8105.datasets)
 library(broom)
@@ -15,9 +13,15 @@ library(mgcv)
 library(ggpubr)
 ```
 
-```{r}
+# Question 1
+
+```{r problem_1}
+
+#Read the data of homicide#
 
 homicide_data <- read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/refs/heads/master/homicide-data.csv") 
+
+#clean data#
 
 homicide_data <- homicide_data |>
   mutate( city_state = paste(city, state, sep = ", "),
@@ -30,14 +34,19 @@ homicide_data_clean <- homicide_data |>
              city_state == "Tulsa, AL")) |>
   filter(victim_race == "White" | victim_race == "Black")
 
+#view the data of homicides by baltimore#
+
 baltimore_df <- homicide_data_clean |>
   filter(city_state == "Baltimore, MD")
 
+#regression of data#
+
 baltimore_fit <- glm(
-  solved ~ victim_age + victim_sex + victim_race,
-  data = baltimore_df,
+  solved ~ victim_age + victim_sex + victim_race, data = baltimore_df,
   family = binomial
 )
+
+#baltimore odds ratio by sex#
 
 baltimore_tidy <- broom::tidy(baltimore_fit, conf.int = TRUE, exp = TRUE)
 
@@ -46,6 +55,8 @@ baltimore_OR_male <- baltimore_tidy |>
   select(term, estimate, conf.low, conf.high)
 
 baltimore_OR_male
+
+#extract odds ratio by city and state#
 
 city_results <- homicide_data_clean |>
   nest(data = -city_state) |>
@@ -76,16 +87,22 @@ This also seems to hold true for many other cities across the United States. Cit
 
 # Question 2
 
-```{r aisle_total}
+```{r bootstrap}
+
+#load dataset and reproducibility#
 
 data("weather_df")
 set.seed(1)
 
 ideal_model <- tmax ~ tmin + prcp
 
+#boot sample function#
+
 boot_sample = function(df) {
   sample_frac(df, replace = TRUE)
 }
+
+#boot strap proedure#
 
 boot_straps <-
   tibble(b = 1:5000) |>
@@ -101,8 +118,12 @@ bootstrap_results <- boot_straps |>
   select(-boot_sample, -models) |> 
   unnest(results)
 
+#bootstrap results for estimate#
+
 bootstrap_results_2 <- bootstrap_results |> group_by(b) |> 
   summarize(ratio = estimate[term == "tmin"]/estimate[term == "prcp"])
+
+#summary of results#
 
 bootstrap_results |>
   ggplot(aes(x = as.numeric(r2))) +
@@ -133,9 +154,13 @@ The distribution of both our parameter ratios and R-squared values of our distri
 
 # Question 3
 
-```{r}
+```{r birth weight}
+
+#load data set#
 
 data_birthweight <- read.csv("birthweight.csv")
+
+#clean data set#
 
 data_birthweight_clean <- data_birthweight |>
   mutate(
@@ -146,6 +171,8 @@ data_birthweight_clean <- data_birthweight |>
                     "Asian", "Puerto Rican", "Other")),
     malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))
   )
+
+#hypothetical model building#
 
 model_lm <- lm(
   bwt ~  babysex + mheight + ppbmi + ppwt + wtgain + frace +
@@ -163,6 +190,8 @@ ggplot(birthweight_residuals, aes(x = pred, y = resid)) +
        title = "Residuals vs Fitted: Proposed Model")
 
 set.seed(1)
+
+#cross validation test#
 
 cv_df =
   crossv_mc(data_birthweight_clean, 100) |> 
@@ -194,6 +223,10 @@ cv_df |>
 
 ```
 
-When plotting the residuals vs the fitted values, we see that there is not a clear association between the two. For the most part, the residuals are concentrated around 0 for most fitted values. This suggests the hypothetical model is at least sufficient for predicting baby birthweight.
+For my hypothetical model, I wanted to focus on variables that were independent of the baby's statistics after birth. Thus, I looked at the possible factors and narrowed down on the attributes of the baby's parents. Specifically, this includes mother's pre-pregnancy BMI and weight, mother's height, weight gain, father's race, mother's race, the family's income, and the avergae number of cigarettes smoken during pregnancy.
+
+The only factors of the baby that I factored into the model were the baby's sex and whether there was a malformation or not.
+
+When plotting the residuals vs the fitted values, we see that there is not a clear association between the two. For the most part, the residuals are concentrated around 0 for most fitted values. This suggests the hypothetical model is at least sufficient for predicting baby birth weight.
 
 By using cross validation and analyzing the distribution of our root mean square error (RMSE) for each model, my hypothetical model had the highest average RMSE. Meanwhile, the model that takes into account baby's head circumference at birth, the sex of the baby, the baby's length at birth, and the interaction between these variables has the lowest distribution of RMSE. Thus, that model seems to be the best fit to predict the birth weight of a baby.
